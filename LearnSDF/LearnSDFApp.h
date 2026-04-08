@@ -7,11 +7,81 @@
 #include "../common/d3dUtil.h"
 #include "../common/UploadBuffer.h"
 
-class LearSDFApp : public D3DApp
+#include "Mesh.h"
+#include "D3DImage.h"
+
+struct PassConstants
+{
+    Math::Mat4 View = Math::Mat4::IDENTITY;
+    Math::Mat4 InvView = Math::Mat4::IDENTITY;
+    Math::Mat4 Proj = Math::Mat4::IDENTITY;
+    Math::Mat4 InvProj = Math::Mat4::IDENTITY;
+    Math::Mat4 ViewProj = Math::Mat4::IDENTITY;
+    Math::Mat4 InvViewProj = Math::Mat4::IDENTITY;
+    Math::Mat4 PrevViewProj = Math::Mat4::IDENTITY;
+    Math::Vec3 EyePosW = { 0.0f, 0.0f, 0.0f };
+    float cbPassPad1 = 0.0f;
+    Math::Vec2 RenderTargetSize = { 0.0f, 0.0f };
+    Math::Vec2 InvRenderTargetSize = { 0.0f, 0.0f };
+    float NearZ = 0.0f;
+    float FarZ = 0.0f;
+    float TotalTime = 0.0f;
+    float DeltaTime = 0.0f;
+
+    Math::Vec4 FogColor = { 0.7f, 0.7f, 0.7f, 1.0f };
+    float gFogStart = 5.0f;
+    float gFogRange = 150.0f;
+    Math::Vec2 cbPassPad2;
+};
+
+struct ObjectConstants
+{
+    Math::Mat4 World = Math::Mat4::IDENTITY;
+    Math::Mat4 PrevWorld = Math::Mat4::IDENTITY;
+    Math::Mat4 TexTransform = Math::Mat4::IDENTITY;
+    UINT     MaterialIndex;
+    UINT     ObjPad0;
+    UINT     ObjPad1;
+    UINT     ObjPad2;
+};
+
+struct SSAOPassConstants
+{
+    Math::Mat4 ProjTex;
+
+    // Coordinates given in view space.
+    float    OcclusionRadius;
+    float    OcclusionFadeStart;
+    float    OcclusionFadeEnd;
+    float    SurfaceEpsilon;
+};
+
+struct BlurSettingsConstants
+{
+    int gBlurRadius;
+
+    // Support up to 11 blur weights.
+    float w0;
+    float w1;
+    float w2;
+
+    float w3;
+    float w4;
+    float w5;
+    float w6;
+
+    float w7;
+    float w8;
+    float w9;
+    float w10;
+};
+
+
+class LearnSDFApp : public D3DApp
 {
 public:
-	LearSDFApp(HINSTANCE hInstance);
-	~LearSDFApp();
+	LearnSDFApp(HINSTANCE hInstance);
+	~LearnSDFApp();
 
 	virtual bool Initialize()override;
 
@@ -20,44 +90,88 @@ private:
 	virtual void Update(const GameTimer& gt)override;
 	virtual void Draw(const GameTimer& gt)override;
 
+    void OnKeyboardInput(const GameTimer& gt);
+    void UpdateObjectCBs(const GameTimer& gt);
+    void UpdateMainPassCB(const GameTimer& gt);
+
 	virtual void OnMouseDown(WPARAM btnState, int x, int y)override;
 	virtual void OnMouseUp(WPARAM btnState, int x, int y)override;
 	virtual void OnMouseMove(WPARAM btnState, int x, int y)override;
 
-	void BuildBoxGeometry();
 	void BuildShadersAndInputLayout();
 	void BuildPSO();
+    void BuildMaterials();
+    void LoadTextures();
+    void BuildRenderItems();
 
 	void BuildDescriptorHeaps();
-	void BuildConstantBuffers();
+	void BuildBuffers();
 	void BuildRootSignature();
 
 private:
-	struct Vertex
-	{
-		Math::Vec3 Pos;
-		Math::Color Color;
-	}; 
+	void InitMesh();
 
-	struct ObjectConstants
-	{
-		Math::Mat4 View;
-		Math::Mat4 Proj;
-	};
+    struct RenderItem
+    {
+        RenderItem() = default;
 
-	ID3D12RootSignature* mRootSignature = nullptr;
-	ID3D12DescriptorHeap* mCbvHeap = nullptr;
+        Math::Mat4 World{};
+        Math::Mat4 TexTransform{};
+        uint ObjCBIndex = -1;
 
-	std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;
+        Material* Mat = nullptr;
+        Mesh* Geo = nullptr;
+        std::unique_ptr<MeshGeometry> MeshGeo;
 
-	std::unique_ptr<MeshGeometry> mBoxGeo = nullptr;
+        // Primitive topology.
+        D3D12_PRIMITIVE_TOPOLOGY PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 
-	ID3DBlob* mvsByteCode = nullptr;
-	ID3DBlob* mpsByteCode = nullptr;
+        // DrawIndexedInstanced parameters.
+        uint IndexCount = 0;
+        uint StartIndexLocation = 0;
+        int BaseVertexLocation = 0;
+    };
+    void DrawRenderItems(ID3D12GraphicsCommandList* cmdList);
 
-	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
+    ID3D12DescriptorHeap* mCbvHeap = nullptr;
+    ID3D12DescriptorHeap* mSrvDescriptorHeap = nullptr;
+    ID3D12DescriptorHeap* mDsvDescriptorHeap = nullptr;
+    uint mCbvSrvDescriptorSize = 0;
 
-	ID3D12PipelineState* mPSO = nullptr;
+	Mesh mSphere;
+	Mesh mGrid;
+	Mesh mColumn;
+
+    std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
+    std::vector<D3D12_INPUT_ELEMENT_DESC> mQuadInputLayout;
+
+    std::unordered_map<std::string, ID3DBlob*> mShaders;
+    std::unordered_map<std::string, IDxcBlob*> mDxcByteCodes;
+    std::unordered_map<std::string, ID3D12RootSignature*> mRootSignatures;
+    std::unordered_map<std::string, ID3D12PipelineState*> mPSOs;
+    std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials;
+    std::unordered_map<std::string, std::unique_ptr<Texture>> mTextures;
+
+    std::unordered_map<std::string, CD3DX12_GPU_DESCRIPTOR_HANDLE> mGPUViews;
+    std::unordered_map<std::string, CD3DX12_CPU_DESCRIPTOR_HANDLE> mCPUViews;
+
+    D3DImage* mGBufferA;
+    D3DImage* mGBufferB;
+    D3DImage* mGBufferC;
+    D3DImage* mGBufferD;
+    D3DImage* mGBufferE;
+    D3DImage* mSceneDepthZ;
+    D3DImage* mBufferSSAO;
+    D3DImage* mBufferBlurTemp;
+
+    std::vector<std::unique_ptr<RenderItem>> mAllRitems;
+    std::unique_ptr<MeshGeometry> mScreenFullGeo = nullptr;
+
+    PassConstants mMainPassCB;
+    std::unique_ptr<UploadBuffer<PassConstants>> PassCB = nullptr;
+    std::unique_ptr<UploadBuffer<ObjectConstants>> ObjectCB = nullptr;
+    std::unique_ptr<UploadBuffer<SSAOPassConstants>> SSAOCB = nullptr;
+    std::unique_ptr<UploadBuffer<BlurSettingsConstants>> BlurCB = nullptr;
 
 	Math::Mat4 mWorld{};
 	Math::Mat4 mView{};

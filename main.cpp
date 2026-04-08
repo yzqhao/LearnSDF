@@ -11,7 +11,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 #endif
 	try
 	{
-		LearSDFApp theApp(hInstance);
+		LearnSDFApp theApp(hInstance);
 		if (!theApp.Initialize())
 			return 0;
 

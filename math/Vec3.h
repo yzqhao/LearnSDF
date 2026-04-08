@@ -97,6 +97,12 @@ public:
     static const Vec3 UNIT_Z;   // Vec3(0,0,1)
 };
 
+inline Vec3& operator*(float k, const Vec3& v)
+{
+    return Vec3(k*v.x, k*v.y, k*v.z);
+}
+
+
 inline float Dot(const Vec3& v1, const Vec3& v2)
 {
     return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;

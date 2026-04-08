@@ -19,19 +19,37 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="LearnSDF\D3DImage.cpp" />
     <ClCompile Include="LearnSDF\LearnSDFApp.cpp" />
+    <ClCompile Include="LearnSDF\Mesh.cpp" />
     <ClCompile Include="main.cpp">
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ExcludedFromBuild>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="LearnSDF\D3DImage.h" />
     <ClInclude Include="LearnSDF\LearnSDFApp.h" />
+    <ClInclude Include="LearnSDF\Mesh.h" />
     <ClInclude Include="platform\PlatformConfig.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="common.vcxproj">
       <Project>{5ce24526-e75b-4364-a490-915b1e73e8e9}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="LearnSDF\shader\basepass.hlsl">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </FxCompile>
+    <FxCompile Include="LearnSDF\shader\Blur.hlsl">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </FxCompile>
+    <FxCompile Include="LearnSDF\shader\common.hlsl">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </FxCompile>
+    <FxCompile Include="LearnSDF\shader\SSAO.hlsl">
+      <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">true</ExcludedFromBuild>
+    </FxCompile>
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{C4680F18-E037-4881-A760-CF9AC4C668C5}</ProjectGuid>
@@ -120,6 +138,7 @@
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)/%(RelativeDir)</ObjectFileName>
       <AdditionalIncludeDirectories>./Third;./Third/draco/include;./Third/rapidjson/include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>

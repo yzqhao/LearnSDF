@@ -91,6 +91,11 @@ public:
     static const Vec2 UNIT_Y;   // Vec2(0,1)
 };
 
+inline Vec2& operator*(float k, const Vec2& v)
+{
+    return Vec2(k * v.x, k * v.y);
+}
+
 inline float LengthSquared(const Vec2& v) 
 {
     return (v.x * v.x + v.y * v.y);

@@ -182,6 +182,29 @@ public:
     int LineNumber = -1;
 };
 
+// Simple struct to represent a material for our demos.  A production 3D engine
+// would likely create a class hierarchy of Materials.
+struct Material
+{
+    // Unique material name for lookup.
+    std::string Name;
+
+    // Index into constant buffer corresponding to this material.
+    int MatCBIndex = -1;
+
+    // Index into SRV heap for diffuse texture.
+    int DiffuseSrvHeapIndex = -1;
+
+    // Index into SRV heap for normal texture.
+    int NormalSrvHeapIndex = -1;
+
+    // Material constant buffer data used for shading.
+    Math::Vec4 DiffuseAlbedo = { 1.0f, 1.0f, 1.0f, 1.0f };
+    Math::Vec3 FresnelR0 = { 0.01f, 0.01f, 0.01f };
+    float Roughness = .25f;
+    Math::Mat4 MatTransform = Math::Mat4::IDENTITY;
+};
+
 struct Texture
 {
 	// Unique material name for lookup.

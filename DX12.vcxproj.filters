@@ -23,6 +23,12 @@
     <ClCompile Include="LearnSDF\LearnSDFApp.cpp">
       <Filter>LearnSDF</Filter>
     </ClCompile>
+    <ClCompile Include="LearnSDF\Mesh.cpp">
+      <Filter>LearnSDF</Filter>
+    </ClCompile>
+    <ClCompile Include="LearnSDF\D3DImage.cpp">
+      <Filter>LearnSDF</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="platform\PlatformConfig.h">
@@ -31,5 +37,25 @@
     <ClInclude Include="LearnSDF\LearnSDFApp.h">
       <Filter>LearnSDF</Filter>
     </ClInclude>
+    <ClInclude Include="LearnSDF\Mesh.h">
+      <Filter>LearnSDF</Filter>
+    </ClInclude>
+    <ClInclude Include="LearnSDF\D3DImage.h">
+      <Filter>LearnSDF</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="LearnSDF\shader\common.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="LearnSDF\shader\basepass.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="LearnSDF\shader\SSAO.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="LearnSDF\shader\Blur.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>
