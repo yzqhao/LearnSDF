@@ -41,3 +41,7 @@ D3DImage* Init2DRTImage(ID3D12Device* d3dDevice, ID3D12GraphicsCommandList* cmdL
 D3DImage* Init2DRTImage3(ID3D12Device10* d3dDevice, UINT64 inWidth, UINT64 inHeight,
     DXGI_FORMAT inFormat, DXGI_FORMAT inSRVFormat, DXGI_FORMAT inRTFormat,
     D3D12_RESOURCE_FLAGS inFlags, DXGI_FORMAT* inCastableFormats, int inCastableFormatCount);
+
+D3DImage* Init3DImage(ID3D12Device* d3dDevice, UINT64 inWidth, UINT64 inHeight, UINT64 inDepth,
+    DXGI_FORMAT inFormat, DXGI_FORMAT inSRVFormat,
+    D3D12_RESOURCE_FLAGS inFlags, int inMipLevelCount = 1);

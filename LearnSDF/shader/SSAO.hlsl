@@ -1,7 +1,7 @@
 //#include "Shadows.hlsl"
 //#include "PBRLighting.hlsl"
 
-#include "Common.hlsl"
+#include "common.hlsl"
 
 const static float PI = 3.14159265359;
 

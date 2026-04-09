@@ -57,5 +57,26 @@
     <FxCompile Include="LearnSDF\shader\Blur.hlsl">
       <Filter>Resource Files</Filter>
     </FxCompile>
+    <FxCompile Include="LearnSDF\shader\DeferredLighting.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="LearnSDF\shader\LightingUtil.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="LearnSDF\shader\PBRLighting.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="LearnSDF\shader\SDFShared.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="LearnSDF\shader\Shadows.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="LearnSDF\shader\PostProcess.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
+    <FxCompile Include="LearnSDF\shader\IntegrationTex3D.hlsl">
+      <Filter>Resource Files</Filter>
+    </FxCompile>
   </ItemGroup>
 </Project>

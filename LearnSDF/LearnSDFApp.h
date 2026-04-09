@@ -76,6 +76,25 @@ struct BlurSettingsConstants
     float w10;
 };
 
+struct ObjectSDFConstants
+{
+    Math::Mat4 ObjWorld;
+    Math::Mat4 ObjInvWorld;
+
+    int SDFIndex;
+    int pad1;
+    int pad2;
+    int pad3;
+};
+
+struct LightShaderParameters
+{
+    Math::Vec3 Color;       // All light
+    float Intensity;   // All light
+    Math::Mat4 ShadowTransform;
+    Math::Vec3 Direction;   // Directional/Spot light only
+    int pad1;
+};
 
 class LearnSDFApp : public D3DApp
 {
@@ -163,6 +182,10 @@ private:
     D3DImage* mSceneDepthZ;
     D3DImage* mBufferSSAO;
     D3DImage* mBufferBlurTemp;
+    D3DImage* mBufferBRDF;
+    D3DImage* mTextureSDF[3];
+
+    D3DResource* mBufferSDF[3];
 
     std::vector<std::unique_ptr<RenderItem>> mAllRitems;
     std::unique_ptr<MeshGeometry> mScreenFullGeo = nullptr;
@@ -172,6 +195,9 @@ private:
     std::unique_ptr<UploadBuffer<ObjectConstants>> ObjectCB = nullptr;
     std::unique_ptr<UploadBuffer<SSAOPassConstants>> SSAOCB = nullptr;
     std::unique_ptr<UploadBuffer<BlurSettingsConstants>> BlurCB = nullptr;
+    std::unique_ptr<UploadBuffer<MeshSDFDescriptor>> MeshSDFCB = nullptr;
+    std::unique_ptr<UploadBuffer<ObjectSDFConstants>> ObjectSDFCB = nullptr;
+    std::unique_ptr<UploadBuffer<LightShaderParameters>> LightCB = nullptr;
 
 	Math::Mat4 mWorld{};
 	Math::Mat4 mView{};
