@@ -166,6 +166,21 @@ static FORCEINLINE uint RoundUpToPowerOfTwo(uint Arg)
 	return 1 << CeilLogTwo(Arg);
 }
 
+static int Log2Int(uint64_t v)
+{
+    unsigned long lz = 0;
+    _BitScanReverse64(&lz, v);
+    return lz;
+}
+
+static float gamma(int n)
+{
+	float MachineEpsilon = (std::numeric_limits<float>::epsilon() * 0.5);
+    return float(n * MachineEpsilon) / float(1 - n * MachineEpsilon);
+}
+
+static int Log2Int(int64_t v) { return Log2Int((uint64_t)v); }
+
 #define JY_FRONT		0
 #define JY_BACK			1
 #define JY_ON			2

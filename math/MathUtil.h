@@ -31,7 +31,9 @@ namespace MathUtil
 	// SRT 得到矩阵
 	Mat4 Transformation(const Vec3& scale, const Quaternion& quat, const Vec3& trans);
 	// Ray和AABB相交检测，如果相交，则distance返回射线起点到交点距离
-	bool intersects(const Ray& ray, const AABB& box, Vec3& hitpoint);
+    bool intersects(const Ray& ray, const AABB& box, Vec3& hitpoint);
+    // Ray和AABB相交检测，如果相交，则distance返回射线起点到交点距离
+    bool intersects(const Ray& ray, const AABB& box, float& dist0, float& dist1);
 	// Ray和球相交检测，如果相交，则distance返回射线起点到交点距离
 	bool intersects(const Ray& ray, const Sphere& sph);
 	// AABB和AABB相交检测，如果相交

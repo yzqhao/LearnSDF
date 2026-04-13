@@ -564,6 +564,14 @@ void Mesh::GenerateIndices16()
     }
 }
 
+void Mesh::GenerateBoundingBox()
+{
+    for (int i =0; i < Vertices.size(); ++i)
+    {
+        BoundingBox.Merge(Vertices[i].Position);
+    }
+}
+
 const std::vector<std::uint16_t>& Mesh::GetIndices16() const
 {
     return Indices16;

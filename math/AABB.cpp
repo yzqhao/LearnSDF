@@ -4,8 +4,8 @@ NS_JYE_MATH_BEGIN
 
 void AABB::Reset()
 {
-    _min.Set(0, 0, 0);
-	_max.Set(0, 0, 0);
+    _min.Set(1000, 1000, 1000);
+	_max.Set(-1000, -1000, -1000);
 }
  
 bool AABB::IsEmpty() const

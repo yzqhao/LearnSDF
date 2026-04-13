@@ -165,6 +165,32 @@ bool MathUtil::intersects(const Ray& ray, const AABB& box, Vec3& out)
 
 }
 
+bool MathUtil::intersects(const Ray& ray, const AABB& box, float& dist0, float& dist1)
+{
+    float t0 = 0, t1 = ray.MaxDist;
+    for (int i = 0; i < 3; ++i)
+    {
+        // Update interval for i'th bounding box slab
+        float InvRayDir = 1.0f / ray.direction[i];
+        float tNear = (box._min[i] - ray.origin[i]) * InvRayDir;
+        float tFar = (box._max[i] - ray.origin[i]) * InvRayDir;
+
+        // Update parametric interval from slab intersection t values
+        if (tNear > tFar) std::swap(tNear, tFar);
+
+        // Update tFar to ensure robust ray--bounds intersection
+        tFar *= 1 + 2 * Math::gamma(3);
+        t0 = tNear > t0 ? tNear : t0;
+        t1 = tFar < t1 ? tFar : t1;
+        if (t0 > t1) return false;
+    }
+
+    dist0 = t0;
+    dist1 = t1;
+
+    return true;
+}
+
 bool MathUtil::intersects(const Ray& ray, const Sphere& sphere)
 {
 	Vec3 l = sphere.GetCenter() - ray.GetRayOrigin();

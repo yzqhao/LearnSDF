@@ -1,7 +1,8 @@
 
 #pragma once
 
-#include "vec3.h"
+#include "Vec3.h"
+#include "Mat4.h"
 
 NS_JYE_MATH_BEGIN
 
@@ -17,9 +18,28 @@ public:
     void Reset();
     bool IsEmpty() const;
     Vec3 GetCenter() const { return (_max + _min) * 0.5f; }
-	Vec3 GetExtent() const { return (_max - _min) * 0.5f; }
+    Vec3 GetExtent() const { return (_max - _min) * 0.5f; }
+    Vec3 GetSize() const { return (_max - _min); }
 	const Vec3& GetMin() const { return _min; }
-	const Vec3& GetMax() const { return _max; }
+    const Vec3& GetMax() const { return _max; }
+
+    float GetSurfaceArea() const
+    {
+        Vec3 V = _max - _min;
+        return 2.0f * (V.x * V.y + V.x * V.z + V.y * V.z);
+    }
+
+    float GetMaxWidth() const
+    {
+        Vec3 V = _max - _min;
+
+        if (V.x > V.y && V.x > V.z)
+            return V.x;
+        else if (V.y > V.z)
+            return V.y;
+
+        return V.z;
+    }
 
     void Merge(const Vec3& point)
     {
@@ -40,6 +60,20 @@ public:
         if (box._max.y > _max.y) _max.y = box._max.y;
         if (box._max.z > _max.z) _max.z = box._max.z;
 	}
+
+    AABB Transform(Mat4 t)
+    {
+        AABB box;
+        box.Merge(Vec3(_min.x, _min.y, _min.z) * t);
+        box.Merge(Vec3(_min.x, _min.y, _max.z) * t);
+        box.Merge(Vec3(_min.x, _max.y, _min.z) * t);
+        box.Merge(Vec3(_min.x, _max.y, _max.z) * t);
+        box.Merge(Vec3(_max.x, _min.y, _min.z) * t);
+        box.Merge(Vec3(_max.x, _min.y, _max.z) * t);
+        box.Merge(Vec3(_max.x, _max.y, _min.z) * t);
+        box.Merge(Vec3(_max.x, _max.y, _max.z) * t);
+        return box;
+    }
 	
     float GetDiagonalLength() const
 	{

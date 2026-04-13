@@ -20,6 +20,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="LearnSDF\D3DImage.cpp" />
+    <ClCompile Include="LearnSDF\KdTree.cpp" />
     <ClCompile Include="LearnSDF\LearnSDFApp.cpp" />
     <ClCompile Include="LearnSDF\Mesh.cpp" />
     <ClCompile Include="main.cpp">
@@ -28,6 +29,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="LearnSDF\D3DImage.h" />
+    <ClInclude Include="LearnSDF\KdTree.h" />
     <ClInclude Include="LearnSDF\LearnSDFApp.h" />
     <ClInclude Include="LearnSDF\Mesh.h" />
     <ClInclude Include="platform\PlatformConfig.h" />

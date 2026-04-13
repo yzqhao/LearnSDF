@@ -50,6 +50,7 @@ public:
     static const Color BLACK;
     static const Color ORANGE;
     static const Color GRAY;
+    static const Color CYAN;
 };
 
 NS_JYE_MATH_END

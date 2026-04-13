@@ -12,9 +12,10 @@ class Ray
 public:     
     Vec3 origin;   
     Vec3 direction;
+    mutable float MaxDist;
 public:
-    Ray() {}
-    Ray(const Vec3& origin, const Vec3& direction) : origin(origin), direction(direction) {}
+    Ray(): MaxDist(FLT_MAX){}
+    Ray(const Vec3& origin, const Vec3& direction, float InMaxDist = FLT_MAX) : origin(origin), direction(direction), MaxDist(InMaxDist) {}
 
 	void SetRayOrigin(const Vec3& ori) { origin = ori; }
 	void SetRayDirection(const Vec3& dir) { direction = dir; }

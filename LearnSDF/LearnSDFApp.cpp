@@ -1,6 +1,8 @@
 
 #include "LearnSDFApp.h"
 #include <filesystem>
+#include "../math/Ray.h"
+#include "KdTree.h"
 
 std::vector<std::string> g_texNames =
 {
@@ -84,6 +86,148 @@ static bool IsFileExit(const std::string& FileName)
     return std::filesystem::exists(FileName);
 }
 
+namespace
+{
+    void GenerateUniformSphereSamples(UINT SampleCount, std::vector<Math::Vec3>& Samples)
+    {
+        // Generate Fibonacci lattice.
+        // Ref: https://stackoverflow.com/questions/9600801/evenly-distributing-n-points-on-a-sphere/26127012#26127012
+
+        const float Phi = Math::PI * (3.0f - sqrt(5.0f)); // Golden angle in radians
+        for (UINT i = 0; i < SampleCount; i++)
+        {
+            Math::Vec3 Sample;
+            Sample.y = 1 - (i / float(SampleCount - 1)) * 2;  // y goes from 1 to - 1
+            float Radius = sqrt(1.0f - Sample.y * Sample.y);  // Radius at y
+
+            float Theta = Phi * i;    // Golden angle increment
+            Sample.x = Radius * cos(Theta);
+            Sample.z = Radius * sin(Theta);
+
+            Samples.push_back(Sample);
+        }
+    }
+
+    void BulidMeshSDF(Mesh& mesh, std::vector<uint8_t>& OutMeshSDF)
+    {
+        std::vector<uint32_t>& Indices = mesh.Indices32;
+        std::vector<Vertex>& Vertices = mesh.Vertices;
+        UINT IndiceCount = (UINT)Indices.size();
+        UINT TriangleCount = IndiceCount / 3;
+
+        // Get all triangles
+        std::vector<std::shared_ptr<TTriangle>> BuildTriangles;
+        for (UINT i = 0; i < TriangleCount; i++)
+        {
+            // Indices for this triangle.
+            UINT i0 = Indices[i * 3 + 0];
+            UINT i1 = Indices[i * 3 + 1];
+            UINT i2 = Indices[i * 3 + 2];
+
+            // Vertices for this triangle.
+            Math::Vec3 v0 = Vertices[i0].Position;
+            Math::Vec3 v1 = Vertices[i1].Position;
+            Math::Vec3 v2 = Vertices[i2].Position;
+
+            auto Triangle = std::make_shared<TTriangle>(v0, v1, v2, Math::Color::BLACK);
+            Triangle->GenerateBoundingBox();
+
+            BuildTriangles.push_back(Triangle);
+        }
+
+        // Bulid kd-tree
+        auto KdTree = std::make_unique<TKdTreeAccelerator>(std::move(BuildTriangles));
+
+        // Build SDF
+        Math::Vec3 SDFCenter = mesh.BoundingBox.GetCenter();
+        float SDFWidth = mesh.BoundingBox.GetMaxWidth() * 1.4f;
+        const int SDFResolution = 32;
+        float SDFUnit = SDFWidth / SDFResolution;
+        const int SampleCount = 256;
+
+        std::vector<float> SDF;
+        SDF.resize(SDFResolution * SDFResolution * SDFResolution);
+
+        for (int z = 0; z < SDFResolution; z++)
+        {
+            for (int y = 0; y < SDFResolution; y++)
+            {
+                for (int x = 0; x < SDFResolution; x++)
+                {
+                    Math::Vec3 RayOrigin(
+                        ((float)x - SDFResolution / 2 + 0.5f) * SDFUnit + SDFCenter.x,
+                        ((float)y - SDFResolution / 2 + 0.5f) * SDFUnit + SDFCenter.y,
+                        ((float)z - SDFResolution / 2 + 0.5f) * SDFUnit + SDFCenter.z
+                    );
+
+                    float MinDistance = FLT_MAX;
+                    int FrontCount = 0;
+                    int BackCount = 0;
+
+                    std::vector<Math::Vec3> SampleDirections;
+                    GenerateUniformSphereSamples(SampleCount, SampleDirections);
+
+                    // Fibonacci lattices.
+                    for (int i = 0; i < SampleCount; i++)
+                    {
+                        Math::Vec3 RayDirection = SampleDirections[i];
+
+                        // Ray-Triangle Intersection test with kd-tree
+                        float Dist;
+                        bool bBackFace;
+                        if (KdTree->Intersect(Math::Ray(RayOrigin, RayDirection), Dist, bBackFace))
+                        {
+                            if (Dist < MinDistance)
+                            {
+                                MinDistance = Dist;
+                            }
+
+                            bBackFace ? BackCount++ : FrontCount++;
+                        }
+                    }
+
+                    int SDFIndex = z * SDFResolution * SDFResolution + y * SDFResolution + x;
+                    SDF[SDFIndex] = MinDistance;
+                    if (BackCount > FrontCount)
+                    {
+                        SDF[SDFIndex] *= -1.0f;
+                    }
+                }
+            }
+        }
+
+        // Convert to EightBitFixedPoint(uint8)
+        std::vector<uint8_t> QuantizedSDF;
+        QuantizedSDF.resize(SDFResolution * SDFResolution * SDFResolution);
+        for (int Index = 0; Index < SDF.size(); Index++)
+        {
+            if (SDF[Index] == FLT_MAX)
+            {
+                QuantizedSDF[Index] = 255;
+            }
+            else
+            {
+                // Convert to range [-1, 1]
+                float Value = SDF[Index] / SDFWidth;
+
+                // Convert to range [0, 1]
+                Value = Value * 0.5f + 0.5f;
+
+                // Covert to range [0, 255], based on D3D format conversion rules for DXGI_FORMAT_R8_UNORM
+                int QuantizedValue = int(Value * 255.0f + .5f);
+                QuantizedSDF[Index] = (UINT8)std::clamp(QuantizedValue, 0, 255);
+            }
+        }
+
+        std::swap(QuantizedSDF, OutMeshSDF);
+
+        // Save SDFDescriptor
+        mesh.SDFDescriptor.Center = SDFCenter;
+        mesh.SDFDescriptor.Extent = SDFWidth * 0.5f;
+        mesh.SDFDescriptor.Resolution = SDFResolution;
+    }
+}
+
 static void CreateMeshSDFTexture(Mesh* pmesh, D3DImage*& pimg, D3DResource*& pbuf, ID3D12Device* pDevice, ID3D12GraphicsCommandList* pCmdList)
 {
     std::vector<uint8_t> MeshSDF;
@@ -103,35 +247,40 @@ static void CreateMeshSDFTexture(Mesh* pmesh, D3DImage*& pimg, D3DResource*& pbu
         int SDFDataCount = Descriptor.Resolution * Descriptor.Resolution * Descriptor.Resolution;
         const uint8_t* SDFData = fileContent;
         MeshSDF.assign(SDFData, SDFData + SDFDataCount);
-
-        int SDFResolution = Descriptor.Resolution;
-        pimg = Init3DImage(pDevice, SDFResolution, SDFResolution, SDFResolution, DXGI_FORMAT::DXGI_FORMAT_R8_UNORM, DXGI_FORMAT::DXGI_FORMAT_R8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
-
-        ID3D12Resource* uploadBuffer = nullptr;
-        pbuf = new D3DResource(D3D12_RESOURCE_STATE_COMMON);
-        pbuf->mResource = d3dUtil::CreateDefaultBuffer(
-            pDevice,
-            pCmdList,
-            MeshSDF.data(),
-            fileSize,
-            uploadBuffer);
-        pbuf->mResource->SetName(L"SDF_Buffer");
     }
     else // Bulid SDF and save to file
     {
+        BulidMeshSDF(*pmesh, MeshSDF);
     }
 
     int SDFResolution = pmesh->SDFDescriptor.Resolution;
+    pimg = Init3DImage(pDevice, SDFResolution, SDFResolution, SDFResolution, DXGI_FORMAT::DXGI_FORMAT_R8_UNORM, DXGI_FORMAT::DXGI_FORMAT_R8_UNORM, D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS);
+
+    ID3D12Resource* uploadBuffer = nullptr;
+    pbuf = new D3DResource(D3D12_RESOURCE_STATE_COMMON);
+    pbuf->mResource = d3dUtil::CreateDefaultBuffer(
+        pDevice,
+        pCmdList,
+        MeshSDF.data(),
+        MeshSDF.size(),
+        uploadBuffer);
+    std::wstring name = L"SDF_Buffer" + AnsiToWString(pmesh->MeshName);
+    pbuf->mResource->SetName(name.c_str());
 }
 
 void LearnSDFApp::InitMesh()
 {
     LoadMesh("res/column.bin", "res/columnindex.bin", mColumn);
 	mColumn.MeshName = "Column";
+    mColumn.GenerateBoundingBox();
+
     mSphere.CreateSphere(0.5f, 20, 20);
     mSphere.MeshName = ("SphereMesh");
+    mSphere.GenerateBoundingBox();
+
     mGrid.CreateGrid(20.0f, 30.0f, 60, 40);
-    mGrid.MeshName =("GridMesh");
+    mGrid.MeshName = ("GridMesh");
+    mGrid.GenerateBoundingBox();
 
 	Mesh* meshs[3] = {&mColumn, &mGrid, &mSphere};
 	for (int i = 0; i < 3; ++i)
@@ -528,9 +677,10 @@ void LearnSDFApp::Draw(const GameTimer& gt)
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
     }
 
+    //SDF Texture
     std::vector<std::string> strTexUAV = {"TextureSDF0UAV", "TextureSDF1UAV", "TextureSDF2UAV"};
     for (int i = 0; i < 3; ++i)
-    {   //Blur
+    {
         D3D12_RESOURCE_BARRIER barriers[2];
         barriers[0] = InitResourceBarrier(mBufferSDF[i]->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
         barriers[1] = InitResourceBarrier(mTextureSDF[i]->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
@@ -589,12 +739,27 @@ void LearnSDFApp::Draw(const GameTimer& gt)
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
     }
 
-	// Clear the back buffer and depth buffer.
-	mCommandList->ClearRenderTargetView(CurrentBackBufferView(), Math::Color::WHITE.getPtr(), 0, nullptr);
-	mCommandList->ClearDepthStencilView(DepthStencilView(), D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, nullptr);
+    {   //PostProcess
+        D3D12_RESOURCE_BARRIER barriers[1];
+        barriers[0] = InitResourceBarrier(mBufferBRDF->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
 
-	// Specify the buffers we are going to render to.
-	mCommandList->OMSetRenderTargets(1, &CurrentBackBufferView(), true, &DepthStencilView());
+        D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { CurrentBackBufferView() };
+        mCommandList->OMSetRenderTargets(1, colorRT, FALSE, nullptr);
+
+        mCommandList->SetPipelineState(mPSOs["PostProcess"]);
+        mCommandList->SetGraphicsRootSignature(mRootSignatures["PostProcess"]);
+
+        mCommandList->SetGraphicsRootDescriptorTable(0, mGPUViews["BufferBRDFSRV"]);
+
+        mCommandList->IASetVertexBuffers(0, 1, &mScreenFullGeo->VertexBufferView());
+        mCommandList->IASetIndexBuffer(&mScreenFullGeo->IndexBufferView());
+        mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        mCommandList->DrawIndexedInstanced(mScreenFullGeo->IndexCount, 1, 0, 0, 0);
+
+        barriers[0] = InitResourceBarrier(mBufferBRDF->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+    }
 
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
@@ -1066,10 +1231,9 @@ void LearnSDFApp::BuildDescriptorHeaps()
     CreateTexture2DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mBufferBlurTemp->mResource, mBufferBlurTemp->mFormat, 0);
     CreateTexture2DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mBufferBRDF->mResource, mBufferBRDF->mSRVFormat, 0);
     for (int i = 0; i < 3; ++i)
-    {
         CreateTexture3DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mTextureSDF[i]->mResource, mTextureSDF[i]->mSRVFormat, 0);
+    for (int i = 0; i < 3; ++i)
         CreateTexture3DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mTextureSDF[i]->mResource, mTextureSDF[i]->mFormat, 0);
-    }
     hCpuDescriptor.Offset(tex2DList.size(), mCbvSrvDescriptorSize);
     hCpuDescriptor = (mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
     mCPUViews["GBufferASRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
@@ -1084,10 +1248,10 @@ void LearnSDFApp::BuildDescriptorHeaps()
     mCPUViews["BufferBlurUAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["BufferBRDFSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["TextureSDF0SRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
-    mCPUViews["TextureSDF0UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["TextureSDF1SRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
-    mCPUViews["TextureSDF1UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["TextureSDF2SRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["TextureSDF0UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mCPUViews["TextureSDF1UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["TextureSDF2UAV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     viewCount = tex2DList.size();
     hGpuDescriptor.Offset(tex2DList.size(), mCbvSrvDescriptorSize);
@@ -1103,10 +1267,10 @@ void LearnSDFApp::BuildDescriptorHeaps()
     mGPUViews["BufferBlurUAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["BufferBRDFSRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["TextureSDF0SRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
-    mGPUViews["TextureSDF0UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["TextureSDF1SRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
-    mGPUViews["TextureSDF1UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["TextureSDF2SRV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["TextureSDF0UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
+    mGPUViews["TextureSDF1UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mGPUViews["TextureSDF2UAV"] = hGpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
 
     viewCount = SwapChainBufferCount;

@@ -29,6 +29,9 @@
     <ClCompile Include="LearnSDF\D3DImage.cpp">
       <Filter>LearnSDF</Filter>
     </ClCompile>
+    <ClCompile Include="LearnSDF\KdTree.cpp">
+      <Filter>LearnSDF</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="platform\PlatformConfig.h">
@@ -41,6 +44,9 @@
       <Filter>LearnSDF</Filter>
     </ClInclude>
     <ClInclude Include="LearnSDF\D3DImage.h">
+      <Filter>LearnSDF</Filter>
+    </ClInclude>
+    <ClInclude Include="LearnSDF\KdTree.h">
       <Filter>LearnSDF</Filter>
     </ClInclude>
   </ItemGroup>

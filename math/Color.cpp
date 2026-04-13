@@ -10,7 +10,8 @@ const Color Color::RED    (    1,     0,     0, 1);
 const Color Color::MAGENTA(    1,     0,     1, 1);
 const Color Color::BLACK  (    0,     0,     0, 1);
 const Color Color::ORANGE (    1,  0.5f,     0, 1);
-const Color Color::GRAY   (0.65f, 0.65f, 0.65f, 1);
+const Color Color::GRAY(0.65f, 0.65f, 0.65f, 1);
+const Color Color::CYAN(0.0f, 1.0f, 1.0f, 1);
 
 unsigned Color::toUInt() const
 {

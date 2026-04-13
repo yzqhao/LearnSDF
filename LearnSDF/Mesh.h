@@ -88,6 +88,8 @@ public:
 
     void GenerateIndices16();
 
+    void GenerateBoundingBox();
+
 private:
 
     void Subdivide();
@@ -110,4 +112,6 @@ public:
     std::string InputLayoutName;
 
     MeshSDFDescriptor SDFDescriptor;
+
+    Math::AABB BoundingBox;
 };
