@@ -298,6 +298,8 @@ bool LearnSDFApp::Initialize()
 
     ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc, nullptr));
 
+    mCamera.SetPosition(7.65f, 3.2f, 4.0f);
+
     mCbvSrvDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
     LoadTextures();
@@ -345,41 +347,25 @@ void LearnSDFApp::OnMouseUp(WPARAM btnState, int x, int y)
 
 void LearnSDFApp::OnMouseMove(WPARAM btnState, int x, int y)
 {
-	if ((btnState & MK_LBUTTON) != 0)
-	{
-		// Make each pixel correspond to a quarter of a degree.
-		float dx = MATH_DEG_TO_RAD(0.25f * static_cast<float>(x - mLastMousePos.x));
-		float dy = MATH_DEG_TO_RAD(0.25f * static_cast<float>(y - mLastMousePos.y));
+    if ((btnState & MK_LBUTTON) != 0)
+    {
+        // Make each pixel correspond to a quarter of a degree.
+        float dx = MATH_DEG_TO_RAD(0.25f * static_cast<float>(x - mLastMousePos.x));
+        float dy = MATH_DEG_TO_RAD(0.25f * static_cast<float>(y - mLastMousePos.y));
 
-		// Update angles based on input to orbit camera around box.
-		mTheta += dx;
-		mPhi += dy;
+        mCamera.Pitch(dy);
+        mCamera.RotateY(dx);
+    }
 
-		// Restrict the angle mPhi.
-		mPhi = Clamp(mPhi, 0.1f, M_PI - 0.1f);
-	}
-	else if ((btnState & MK_RBUTTON) != 0)
-	{
-		// Make each pixel correspond to 0.005 unit in the scene.
-		float dx = 0.005f * static_cast<float>(x - mLastMousePos.x);
-		float dy = 0.005f * static_cast<float>(y - mLastMousePos.y);
-
-		// Update the camera radius based on input.
-		mRadius += dx - dy;
-
-		// Restrict the radius.
-		mRadius = Clamp(mRadius, 3.0f, 15.0f);
-	}
-
-	mLastMousePos.x = x;
-	mLastMousePos.y = y;
+    mLastMousePos.x = x;
+    mLastMousePos.y = y;
 }
 
 void LearnSDFApp::OnResize()
 {
 	D3DApp::OnResize();
 
-	Math::Mat4::CreatePerspective(45, AspectRatio(), 1.0f, 1000.0f, &mProj);
+    mCamera.SetLens(0.25f * M_PI, AspectRatio(), 1.0f, 1000.0f);
 }
 
 void LearnSDFApp::Update(const GameTimer& gt)
@@ -392,7 +378,21 @@ void LearnSDFApp::Update(const GameTimer& gt)
 
 void LearnSDFApp::OnKeyboardInput(const GameTimer& gt)
 {
+    const float dt = gt.DeltaTime();
 
+    if (GetAsyncKeyState('W') & 0x8000)
+        mCamera.Walk(10.0f * dt);
+
+    if (GetAsyncKeyState('S') & 0x8000)
+        mCamera.Walk(-10.0f * dt);
+
+    if (GetAsyncKeyState('A') & 0x8000)
+        mCamera.Strafe(-10.0f * dt);
+
+    if (GetAsyncKeyState('D') & 0x8000)
+        mCamera.Strafe(10.0f * dt);
+
+    mCamera.UpdateViewMatrix();
 }
 
 void LearnSDFApp::UpdateObjectCBs(const GameTimer& gt)
@@ -457,32 +457,14 @@ std::vector<float> CalcGaussWeights(float sigma)
 
 void LearnSDFApp::UpdateMainPassCB(const GameTimer& gt)
 {
-    //mMainPassCB.View = mCamera.GetView();
-    //mMainPassCB.Proj = mCamera.GetProj();
-    //mMainPassCB.ViewProj = mMainPassCB.View * mMainPassCB.Proj;
-    //mMainPassCB.InvView = mMainPassCB.View.GetInversed();
-    //mMainPassCB.InvProj = mMainPassCB.Proj.GetInversed();
-    //mMainPassCB.InvViewProj = mMainPassCB.ViewProj.GetInversed();
-    mMainPassCB.View = Math::Mat4(-0.5, 0, -0.86603, 0,
-        0.00, 1.0, 0.00, 0.00,
-        0.866, 0, -0.5, 0.0,
-        0.3609, -3.2, 8.625, 1.0
-    );
+    mMainPassCB.View = mCamera.GetView();
+    mMainPassCB.Proj = mCamera.GetProj();
+    mMainPassCB.ViewProj = mMainPassCB.View * mMainPassCB.Proj;
     mMainPassCB.InvView = mMainPassCB.View.GetInversed();
-    mMainPassCB.Proj = Math::Mat4(1.358, 0, 0, 0,
-        0.00, 2.414, 0.00, 0.00,
-        -0.00059, -0.00015, 1.001, 1.0,
-        0, 0, -0.1001, 0.0
-    );
     mMainPassCB.InvProj = mMainPassCB.Proj.GetInversed();
-    mMainPassCB.ViewProj = Math::Mat4(-0.67917, -0.00067, -0.86689, -0.86603,
-        0.00, 2.41421, 0.00, 0.00,
-        1.17596, -0.00039, -0.5005, -0.50,
-        0.49178, -7.71883, 8.53363, 8.62509
-    );
     mMainPassCB.InvViewProj = mMainPassCB.ViewProj.GetInversed();
 
-    mMainPassCB.EyePosW = Math::Vec3(7.65f, 3.2f, 4.0f);
+    mMainPassCB.EyePosW = mCamera.GetPosition();
     mMainPassCB.RenderTargetSize.Set((float)mClientWidth, (float)mClientHeight);
     mMainPassCB.InvRenderTargetSize.Set(1.0f / mClientWidth, 1.0f / mClientHeight);
     mMainPassCB.NearZ = 1.0f;

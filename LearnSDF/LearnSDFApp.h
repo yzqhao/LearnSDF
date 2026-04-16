@@ -6,6 +6,7 @@
 #include "../math/Vec4.h"
 #include "../common/d3dUtil.h"
 #include "../common/UploadBuffer.h"
+#include "../common/Camera.h"
 
 #include "Mesh.h"
 #include "D3DImage.h"
@@ -199,15 +200,11 @@ private:
     std::unique_ptr<UploadBuffer<ObjectSDFConstants>> ObjectSDFCB = nullptr;
     std::unique_ptr<UploadBuffer<LightShaderParameters>> LightCB = nullptr;
 
-	Math::Mat4 mWorld{};
-	Math::Mat4 mView{};
-	Math::Mat4 mProj{};
-
 	float mTheta = 1.5f * M_PI;
 	float mPhi = M_PI / 4;
 	float mRadius = 5.0f;
 
 	POINT mLastMousePos;
-
+    Camera mCamera;
 };
 
