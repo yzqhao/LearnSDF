@@ -1,25 +1,62 @@
-#ifndef __SHADER_SHADOW__
-#define __SHADER_SHADOW__
-
-#include "Common.hlsl"
-#include "LightingUtil.hlsl"
 #include "SDFShared.hlsl"
 
-StructuredBuffer<LightParameters> Lights : register(t2, space1);
+//Texture2D DepthGbuffer : register(t3, space0);
+Texture2D gTextureMaps[200] : register(t3, space0);
 
-/*
-* Clips a ray to an AABB.  Does not handle rays parallel to any of the planes.
-*
-* @param RayOrigin - The origin of the ray in world space.
-* @param RayEnd - The end of the ray in world space.
-* @param BoxMin - The minimum extrema of the box.
-* @param BoxMax - The maximum extrema of the box.
-* @return - Returns the closest intersection along the ray in x, and furthest in y.
-*			If the ray did not intersect the box, then the furthest intersection <= the closest intersection.
-*			The intersections will always be in the range [0,1], which corresponds to [RayOrigin, RayEnd] in worldspace.
-*			To find the world space position of either intersection, simply plug it back into the ray equation:
-*			WorldPos = RayOrigin + (RayEnd - RayOrigin) * Intersection;
-*/
+struct VertexIn
+{
+    float3 PosL    : POSITION;
+    float2 TexC    : TEXCOORD;
+};
+
+struct VertexOut
+{
+	float4 PosH  : SV_POSITION;
+    float2 TexC    : TEXCOORD;
+};
+
+
+VertexOut VS(VertexIn vin)
+{
+    VertexOut vout = (VertexOut)0.0f;
+
+	// Already in homogeneous clip space.
+	vout.PosH = float4(vin.PosL, 1.0f);
+
+    vout.TexC = vin.TexC;
+
+    return vout;
+}
+
+float4 NDCToView(float4 NDCPos, float4x4 InvProj)
+{
+    float4 View = mul(NDCPos, InvProj);
+    View /= View.w;
+ 
+    return View;
+}
+
+float4 UVToNDC(float2 UVPos, float Depth)
+{
+    return float4(2 * UVPos.x - 1, 1 - 2 * UVPos.y, Depth, 1.0f);
+}
+
+float4 ViewToWolrd(float4 ViewPos, float4x4 InvView)
+{
+	return mul(ViewPos, InvView);
+}
+
+float4 UVToWorld(float2 UV, float NDCDepth, float4x4 InvProj, float4x4 InvView)
+{
+	float4 NDC = UVToNDC(UV, NDCDepth);
+	
+	float4 View = NDCToView(NDC, InvProj);
+	
+	float4 World = ViewToWolrd(View, InvView);
+	
+	return World;
+}
+
 float2 LineBoxIntersect(float3 RayOrigin, float3 RayEnd, float3 BoxMin, float3 BoxMax)
 {
     float3 InvRayDir = 1.0f / (RayEnd - RayOrigin);
@@ -42,34 +79,36 @@ float2 LineBoxIntersect(float3 RayOrigin, float3 RayEnd, float3 BoxMin, float3 B
     return saturate(BoxIntersections);
 }
 
-float SDF(float3 ReceiverPosW, float3 LightPosW, float TanLightAngle)
+void RayMarchDistanceFields(float3 WorldRayStart, float3 WorldRayEnd, float MaxRayTime, out float MinRayTime, out float TotalStepsTaken)
 {
-	float MinConeVisibility = 1.0f;
+	MinRayTime = MaxRayTime;
+	TotalStepsTaken = 0;
 	
 	for (uint i = 0; i < 3; i++)
 	{
 		if (i == 1)	// 跳过地板的SDF
 			continue;
-	    int SDFIndex = ObjectSDFDescriptors[i].SDFIndex;
+		int SDFIndex = ObjectSDFDescriptors[i].SDFIndex;
 		
-		float3 LocalRayStart = mul(float4(ReceiverPosW, 1.0f), ObjectSDFDescriptors[i].ObjInvWorld).xyz;
-		float3 LocalRayEnd = mul(float4(LightPosW, 1.0f), ObjectSDFDescriptors[i].ObjInvWorld).xyz;
+		float3 LocalRayStart = mul(float4(WorldRayStart, 1.0f), ObjectSDFDescriptors[i].ObjInvWorld).xyz;
+		float3 LocalRayEnd = mul(float4(WorldRayEnd, 1.0f), ObjectSDFDescriptors[i].ObjInvWorld).xyz;
 		float3 LocalRayDir = LocalRayEnd - LocalRayStart;
 		LocalRayDir = normalize(LocalRayDir);
-		float LocalRayLength = length(LocalRayEnd - LocalRayStart);			
-		
+		float LocalRayLength = length(LocalRayEnd - LocalRayStart);
+				
 		float Extent = MeshSDFDescriptors[SDFIndex].Extent;
 		int Resolution = MeshSDFDescriptors[SDFIndex].Resolution;
 		float RcpExtent = rcp(Extent);
 		
 		float3 LocalExtent = float3(Extent, Extent, Extent);
-		float2 IntersectionTimes = LineBoxIntersect(LocalRayStart, LocalRayEnd, -LocalExtent, LocalExtent);
+		float2 IntersectionTimes = LineBoxIntersect(LocalRayStart, LocalRayEnd, -LocalExtent, LocalExtent);	
 		
 		[branch]
 		if (IntersectionTimes.x < IntersectionTimes.y && IntersectionTimes.x < 1)
 		{	
 			float SampleRayTime = IntersectionTimes.x * LocalRayLength;
 			
+			float MinDistance = 1000000;
 			int Step = 0;			
 			
 			[loop]
@@ -80,14 +119,7 @@ float SDF(float3 ReceiverPosW, float3 LightPosW, float TanLightAngle)
 				float3 VolumeUV = (ClampedSamplePosition * RcpExtent) * 0.5f + 0.5f;
 				float SDFWidth = Extent * 2.0f;
 				float DistanceField = SampleMeshDistanceField(SDFIndex, VolumeUV, SDFWidth);
-
-				// Don't allow occlusion within an object's self shadow distance
-				float SelfShadowScale = 100.0f;
-				float SelfShadowVisibility = 1 - saturate(SampleRayTime * SelfShadowScale);
-				
-				float SphereRadius = TanLightAngle * SampleRayTime;
-				float StepConeVisibility = max(saturate(DistanceField / SphereRadius), SelfShadowVisibility);			
-				MinConeVisibility = min(MinConeVisibility, StepConeVisibility);							
+				MinDistance = min(MinDistance, DistanceField);
 				
 				float MinStepSize = 1.0f / (4 * MAX_SDF_STEP);
 				float StepDistance = max(DistanceField, MinStepSize);
@@ -99,30 +131,39 @@ float SDF(float3 ReceiverPosW, float3 LightPosW, float TanLightAngle)
 					break;
 				}
 			}
+			
+			if (MinDistance < 0 || Step == MAX_SDF_STEP)
+			{
+				MinRayTime = min(MinRayTime, SampleRayTime);
+			}
+				
+			TotalStepsTaken += Step;
 		}
-	}
-	
-	if(MinConeVisibility > 0.99f)
-	{
-		return 1.0f;
-	}
-	
-	return MinConeVisibility;
+	}	
 }
 
-float CalcVisibility(float4 ShadowPosH, bool bPerspectiveView, float3 ReceiverPosW, float3 LightPosW, float TanLightAngle)
+float4 PS(VertexOut pin) : SV_Target
 {
-    // Complete projection by doing division by w.
-    ShadowPosH.xyz /= ShadowPosH.w;
-
-    // NDC space.
-	float3 ReceiverPos = ShadowPosH.xyz;	
-	if (ReceiverPos.x < 0.0f || ReceiverPos.x > 1.0f || ReceiverPos.y < 0.0f || ReceiverPos.y > 1.0f)
+    Texture2D DepthGbuffer = gTextureMaps[18];
+	float NDCDepth = DepthGbuffer.SampleLevel(gsamPointClamp, pin.TexC, 0.0f).r;	
+	float3 OpaqueWorldPosition = UVToWorld(pin.TexC, NDCDepth, gInvProj, gInvView).xyz;
+	
+	float TraceDistance = 400;
+	float3 WorldRayStart = gEyePosW;
+	float3 WorldRayEnd = WorldRayStart + normalize(OpaqueWorldPosition - WorldRayStart) * TraceDistance;
+	
+	float MinRayTime;
+	float TotalStepsTaken;
+	RayMarchDistanceFields(WorldRayStart, WorldRayEnd, TraceDistance, MinRayTime, TotalStepsTaken);
+	
+	float Color = saturate(TotalStepsTaken / 100);
+	
+	if (MinRayTime < TraceDistance)
 	{
-		return 0.0f;
+		Color += 0.1f;
 	}
-
-	return SDF(ReceiverPosW, LightPosW, TanLightAngle);
+	
+	return float4(Color, Color, Color, 1.0f);
 }
 
-#endif //__SHADER_SHADOW__
+

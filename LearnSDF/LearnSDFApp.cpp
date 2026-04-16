@@ -4,6 +4,8 @@
 #include "../math/Ray.h"
 #include "KdTree.h"
 
+static bool isDebugSDF = false;
+
 std::vector<std::string> g_texNames =
 {
     "columnDiffuseMap",
@@ -407,8 +409,14 @@ void LearnSDFApp::UpdateObjectCBs(const GameTimer& gt)
 
         ObjectSDFConstants ObjSDFConstants;
         ObjSDFConstants.ObjWorld = e->World;
-        ObjSDFConstants.ObjInvWorld = e->World.GetInversed();
+        ObjSDFConstants.ObjInvWorld = ObjSDFConstants.ObjWorld.GetInversed();
         ObjSDFConstants.SDFIndex = e->ObjCBIndex;
+
+        if (e->ObjCBIndex == 0) // hack
+        {
+            ObjSDFConstants.ObjWorld.a42 = 2.79374f;
+            ObjSDFConstants.ObjInvWorld = ObjSDFConstants.ObjWorld.GetInversed();
+        }
         ObjectSDFCB->CopyData(e->ObjCBIndex, ObjSDFConstants);
     }
 }
@@ -460,23 +468,21 @@ void LearnSDFApp::UpdateMainPassCB(const GameTimer& gt)
         0.866, 0, -0.5, 0.0,
         0.3609, -3.2, 8.625, 1.0
     );
+    mMainPassCB.InvView = mMainPassCB.View.GetInversed();
     mMainPassCB.Proj = Math::Mat4(1.358, 0, 0, 0,
         0.00, 2.414, 0.00, 0.00,
         -0.00059, -0.00015, 1.001, 1.0,
         0, 0, -0.1001, 0.0
     );
+    mMainPassCB.InvProj = mMainPassCB.Proj.GetInversed();
     mMainPassCB.ViewProj = Math::Mat4(-0.67917, -0.00067, -0.86689, -0.86603,
         0.00, 2.41421, 0.00, 0.00,
         1.17596, -0.00039, -0.5005, -0.50,
         0.49178, -7.71883, 8.53363, 8.62509
     );
-    mMainPassCB.InvProj = Math::Mat4(0.73638, 0, 0, 0,
-        0.00, 0.41421, 0.00, 0.00,
-        0, 0, 0, -9.99,
-        -0.00014, -0.00032, 1, 10
-    );
+    mMainPassCB.InvViewProj = mMainPassCB.ViewProj.GetInversed();
 
-    //mMainPassCB.EyePosW = mCamera.GetPosition();
+    mMainPassCB.EyePosW = Math::Vec3(7.65f, 3.2f, 4.0f);
     mMainPassCB.RenderTargetSize.Set((float)mClientWidth, (float)mClientHeight);
     mMainPassCB.InvRenderTargetSize.Set(1.0f / mClientWidth, 1.0f / mClientHeight);
     mMainPassCB.NearZ = 1.0f;
@@ -739,6 +745,7 @@ void LearnSDFApp::Draw(const GameTimer& gt)
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
     }
 
+    if (!isDebugSDF)
     {   //PostProcess
         D3D12_RESOURCE_BARRIER barriers[1];
         barriers[0] = InitResourceBarrier(mBufferBRDF->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
@@ -760,6 +767,34 @@ void LearnSDFApp::Draw(const GameTimer& gt)
         barriers[0] = InitResourceBarrier(mBufferBRDF->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
         mCommandList->ResourceBarrier(_countof(barriers), barriers);
     }
+
+    if (isDebugSDF)
+    {   //DebugSDFScene
+        D3D12_RESOURCE_BARRIER barriers[1];
+        barriers[0] = InitResourceBarrier(mBufferBRDF->mResource, D3D12_RESOURCE_STATE_GENERIC_READ, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+
+        D3D12_CPU_DESCRIPTOR_HANDLE colorRT[1] = { CurrentBackBufferView() };
+        mCommandList->OMSetRenderTargets(1, colorRT, FALSE, nullptr);
+
+        mCommandList->SetPipelineState(mPSOs["DebugSDFScene"]);
+        mCommandList->SetGraphicsRootSignature(mRootSignatures["DebugSDFScene"]);
+
+        mCommandList->SetGraphicsRootConstantBufferView(0, PassCB->Resource()->GetGPUVirtualAddress());
+        mCommandList->SetGraphicsRootDescriptorTable(1, mSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart()); //mGPUViews["SceneDepthZSRV"]
+        mCommandList->SetGraphicsRootDescriptorTable(2, mGPUViews["TextureSDF0SRV"]);
+        mCommandList->SetGraphicsRootShaderResourceView(3, MeshSDFCB->Resource()->GetGPUVirtualAddress());
+        mCommandList->SetGraphicsRootShaderResourceView(4, ObjectSDFCB->Resource()->GetGPUVirtualAddress());
+
+        mCommandList->IASetVertexBuffers(0, 1, &mScreenFullGeo->VertexBufferView());
+        mCommandList->IASetIndexBuffer(&mScreenFullGeo->IndexBufferView());
+        mCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        mCommandList->DrawIndexedInstanced(mScreenFullGeo->IndexCount, 1, 0, 0, 0);
+
+        barriers[0] = InitResourceBarrier(mBufferBRDF->mResource, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_GENERIC_READ);
+        mCommandList->ResourceBarrier(_countof(barriers), barriers);
+    }
+
 
 	// Indicate a state transition on the resource usage.
 	mCommandList->ResourceBarrier(1, &CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
@@ -801,6 +836,8 @@ void LearnSDFApp::BuildShadersAndInputLayout()
     mDxcByteCodes["PostProcessVS"] = d3dUtil::DxcCompileShader(L"LearnSDF\\shader\\PostProcess.hlsl", nullptr, 0, L"VS", L"vs_6_0");
     mDxcByteCodes["PostProcessPS"] = d3dUtil::DxcCompileShader(L"LearnSDF\\shader\\PostProcess.hlsl", nullptr, 0, L"PS", L"ps_6_0");
     mDxcByteCodes["IntegrationTex3DCS"] = d3dUtil::DxcCompileShader(L"LearnSDF\\shader\\IntegrationTex3D.hlsl", nullptr, 0, L"CS", L"cs_6_0");
+    mDxcByteCodes["DebugSDFSceneVS"] = d3dUtil::DxcCompileShader(L"LearnSDF\\shader\\DebugSDFScene.hlsl", nullptr, 0, L"VS", L"vs_6_0");
+    mDxcByteCodes["DebugSDFScenePS"] = d3dUtil::DxcCompileShader(L"LearnSDF\\shader\\DebugSDFScene.hlsl", nullptr, 0, L"PS", L"ps_6_0");
 
     mInputLayout =
     {
@@ -969,6 +1006,35 @@ void LearnSDFApp::BuildPSO()
         psoDesc.SampleDesc.Quality = 0;
         psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
         ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["PostProcess"])));
+    }
+    {   // DebugSDFScene
+        D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc;
+        ZeroMemory(&psoDesc, sizeof(D3D12_GRAPHICS_PIPELINE_STATE_DESC));
+        psoDesc.InputLayout = { mQuadInputLayout.data(), (uint)mQuadInputLayout.size() };
+        psoDesc.pRootSignature = mRootSignatures["DebugSDFScene"];
+        psoDesc.VS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["DebugSDFSceneVS"]->GetBufferPointer()),
+            mDxcByteCodes["DebugSDFSceneVS"]->GetBufferSize()
+        };
+        psoDesc.PS =
+        {
+            reinterpret_cast<BYTE*>(mDxcByteCodes["DebugSDFScenePS"]->GetBufferPointer()),
+            mDxcByteCodes["DebugSDFScenePS"]->GetBufferSize()
+        };
+        psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
+        psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
+        psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+        psoDesc.DepthStencilState.DepthEnable = FALSE;
+        psoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+        psoDesc.SampleMask = UINT_MAX;
+        psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+        psoDesc.NumRenderTargets = 1;
+        psoDesc.RTVFormats[0] = mBackBufferFormat;
+        psoDesc.SampleDesc.Count = 1;
+        psoDesc.SampleDesc.Quality = 0;
+        psoDesc.DSVFormat = DXGI_FORMAT_UNKNOWN;
+        ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSOs["DebugSDFScene"])));
     }
 }
 
@@ -1234,8 +1300,8 @@ void LearnSDFApp::BuildDescriptorHeaps()
         CreateTexture3DSRV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mTextureSDF[i]->mResource, mTextureSDF[i]->mSRVFormat, 0);
     for (int i = 0; i < 3; ++i)
         CreateTexture3DUAV(md3dDevice, hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize), mTextureSDF[i]->mResource, mTextureSDF[i]->mFormat, 0);
-    hCpuDescriptor.Offset(tex2DList.size(), mCbvSrvDescriptorSize);
     hCpuDescriptor = (mSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+    hCpuDescriptor.Offset(tex2DList.size(), mCbvSrvDescriptorSize);
     mCPUViews["GBufferASRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["GBufferBSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
     mCPUViews["GBufferCSRV"] = hCpuDescriptor.Offset(1, mCbvSrvDescriptorSize);
@@ -1633,6 +1699,44 @@ void LearnSDFApp::BuildRootSignature()
             serializedRootSig->GetBufferPointer(),
             serializedRootSig->GetBufferSize(),
             IID_PPV_ARGS(&mRootSignatures["PostProcess"])));
+    }
+    {   // DebugSDFScene
+        CD3DX12_ROOT_PARAMETER slotRootParameter[5];
+
+        CD3DX12_DESCRIPTOR_RANGE texTable1;
+        texTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 203, 3, 0);
+        CD3DX12_DESCRIPTOR_RANGE texTable2;
+        texTable2.Init(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 3, 0, 0);
+
+        // Create root CBVs.
+        slotRootParameter[0].InitAsConstantBufferView(0);
+        slotRootParameter[1].InitAsDescriptorTable(1, &texTable1, D3D12_SHADER_VISIBILITY_PIXEL);
+        slotRootParameter[2].InitAsDescriptorTable(1, &texTable2, D3D12_SHADER_VISIBILITY_PIXEL);
+        slotRootParameter[3].InitAsShaderResourceView(0, 1);
+        slotRootParameter[4].InitAsShaderResourceView(1, 1);
+
+        // A root signature is an array of root parameters.
+        auto staticSamplers = GetStaticSamplers();
+        CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(5, slotRootParameter, staticSamplers.size(), staticSamplers.data(),
+            D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+        // create a root signature with a single slot which points to a descriptor range consisting of a single constant buffer
+        ID3DBlob* serializedRootSig = nullptr;
+        ID3DBlob* errorBlob = nullptr;
+        HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+            &serializedRootSig, &errorBlob);
+
+        if (errorBlob != nullptr)
+        {
+            ::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+        }
+        ThrowIfFailed(hr);
+
+        ThrowIfFailed(md3dDevice->CreateRootSignature(
+            0,
+            serializedRootSig->GetBufferPointer(),
+            serializedRootSig->GetBufferSize(),
+            IID_PPV_ARGS(&mRootSignatures["DebugSDFScene"])));
     }
 }
 

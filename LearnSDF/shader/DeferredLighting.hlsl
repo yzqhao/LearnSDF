@@ -72,8 +72,7 @@ float4 PS(VertexOut pin) : SV_TARGET
 			float3 LightPosition = WorldPos + LightDir * 100.0f;
 				
 			float TanLightAngle = tan(3 * PI / 180.0f);  //TODO
-			float ShadowFactor = CalcVisibility(ShadowPosH, false,
-				WorldPos, LightPosition, TanLightAngle); 						
+			float ShadowFactor = CalcVisibility(ShadowPosH, false, WorldPos, LightPosition, TanLightAngle); 						
 				
 			float3 Radiance = Light.Intensity * Light.Color;
 
